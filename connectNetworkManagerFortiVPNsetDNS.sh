@@ -1,13 +1,19 @@
 #!/bin/bash
 
+CONNECTIONNAME=YourVPNconnectionName
+DNS1IPADDR=X.X.X.X
+DNS2IPADDR=Y.Y.Y.Y
+SEARCHDOMAIN=exampledomain.com
+HOSTNAMETOCHECK=examplehostnametocheck
+
 sudo -u $USERNAME nmcli connection up $CONNECTIONNAME
 
 sudo resolvectl dns ppp0 $DNS1IPADDR $DNS2IPADDR
 
-sudo resolvectl domain ppp0 "$EXAMPLEDOMAIN.COM"
+sudo resolvectl domain ppp0 "$SEARCHDOMAIN"
 
 resolvectl status ppp0
 
-resolvectl query EXAMPLEHOSTTOCHECK
+resolvectl query $HOSTNAMETOCHECK
 
-ping EXAMPLEHOSTTOCHECK -c 1
+ping $HOSTNAMETOCHECK -c 1
