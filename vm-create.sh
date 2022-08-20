@@ -14,7 +14,7 @@ PASSWORD="password"
 SSH_KEY=`cat $SSH_KEY_FILE`
 
 #VM parameters
-VM_DISK_SIZE="128G"
+VM_DISK_SIZE="32G"
 VM_RAM="2048"
 VM_VCPUS="2"
 VM_BRIDGE="virbr1"
@@ -35,24 +35,43 @@ IPADDR=$2
 
 
 #list at: osinfo-query os
+#OracleLinux- working fine
+#AlmaLinux - working fine
 #CentOS7/8 - working fine
 #Fedora32 - working fine
 #OpenSUSE15.2 - working fine, DNS is not set
-#Ubuntu20.04 - unable to boot (grub rescue)
+#Ubuntu22.04 - working fine
 #Debian10 - unable to boot (grub rescue)
+
+ROOT_PART='sda1'
 
 #choosing image files for OS Family
 case "$OSFAMILY" in
+"almalinux")  echo "OS: AlmaLinux"
+	VM_OS_VARIANT="almalinux9"
+	CLOUD_IMAGE_FOLDER="$ISO_FOLDER/AlmaLinux"
+	CLOUD_IMAGE_FILE="AlmaLinux-9-GenericCloud-9.0-20220718.x86_64.qcow2"
+	IFNAME="eth0"
+	ROOT_PART='sda4'
+	;;
+"oraclelinux")  echo "OS: OracleLinux"
+	VM_OS_VARIANT="almalinux9"
+	CLOUD_IMAGE_FOLDER="$ISO_FOLDER/OracleLinux"
+	CLOUD_IMAGE_FILE="OL9U0_x86_64-kvm-b142.qcow"
+	IFNAME="eth0"
+	ROOT_PART='sda2'
+	VM_DISK_SIZE='40G'
+	;;
 "centos")  echo "OS: CentOS"
 	VM_OS_VARIANT="centos8"
 	CLOUD_IMAGE_FOLDER="$ISO_FOLDER/CentOS"
-	CLOUD_IMAGE_FILE="CentOS-8-GenericCloud-8.2.2004-20200611.2.x86_64.qcow2"
+	CLOUD_IMAGE_FILE="CentOS-Stream-GenericCloud-9-20211104.1.x86_64.qcow2"
 	IFNAME="eth0"
 	;;
 "fedora")  echo "OS: Fedora"
 	VM_OS_VARIANT="fedora32"
 	CLOUD_IMAGE_FOLDER="$ISO_FOLDER/Fedora"
-	CLOUD_IMAGE_FILE="Fedora-Cloud-Base-32-1.6.x86_64.qcow2"
+	CLOUD_IMAGE_FILE="Fedora-Cloud-Base-34_Beta-1.3.x86_64.qcow2"
 	IFNAME="eth0"
 	;;
 "opensuse")  echo "OS: OpenSUSE"
@@ -64,8 +83,9 @@ case "$OSFAMILY" in
 "ubuntu") echo "OS: Ubuntu"
 	VM_OS_VARIANT="ubuntu20.04"
 	CLOUD_IMAGE_FOLDER="$ISO_FOLDER/Ubuntu"
-	CLOUD_IMAGE_FILE="focal-server-cloudimg-amd64.img"
-	IFNAME="ens3"
+	CLOUD_IMAGE_FILE="jammy-server-cloudimg-amd64.img"
+	IFNAME="enp1s0"
+	ROOT_PART='vda1'
 	;;
 "debian") echo  "OS: Debian"
 	VM_OS_VARIANT="debian10"
@@ -86,13 +106,37 @@ then
 	exit
 fi
 
-#create NEW big qcow2
-echo 'Creating new qcow2 image...'
-qemu-img create -f qcow2 $KVM_VM_FOLDER/$VMNAME.qcow2 $VM_DISK_SIZE
+
+if [[ "$OSFAMILY" == "ubuntu" ]]; then
 
 #copy data to new qcow image
 printf "\nCopying data to new qcow image...\n"
-virt-resize --expand /dev/sda1 $CLOUD_IMAGE_FOLDER/$CLOUD_IMAGE_FILE $KVM_VM_FOLDER/$VMNAME.qcow2
+cp $CLOUD_IMAGE_FOLDER/$CLOUD_IMAGE_FILE $KVM_VM_FOLDER/$VMNAME-big.qcow2
+
+#resize img (Ubuntu does not support virt-resize --expand)
+qemu-img resize $KVM_VM_FOLDER/$VMNAME-big.qcow2 16G
+
+#compressing Qcow2 images
+printf '\nCompressing Qcow2 image...\n'
+qemu-img convert -c -O qcow2 $KVM_VM_FOLDER/$VMNAME-big.qcow2 $KVM_VM_FOLDER/$VMNAME.qcow2
+rm $KVM_VM_FOLDER/$VMNAME-big.qcow2
+
+else
+
+#create NEW big qcow2
+echo 'Creating new qcow2 image...'
+qemu-img create -f qcow2 $KVM_VM_FOLDER/$VMNAME-big.qcow2 $VM_DISK_SIZE
+
+#copy data to new qcow image
+printf "\nCopying data to new qcow image...\n"
+virt-resize --expand /dev/$ROOT_PART $CLOUD_IMAGE_FOLDER/$CLOUD_IMAGE_FILE $KVM_VM_FOLDER/$VMNAME-big.qcow2
+
+#compressing Qcow2 images
+printf '\nCompressing Qcow2 image...\n'
+qemu-img convert -c -O qcow2 $KVM_VM_FOLDER/$VMNAME-big.qcow2 $KVM_VM_FOLDER/$VMNAME.qcow2
+rm $KVM_VM_FOLDER/$VMNAME-big.qcow2
+
+fi
 
 
 #creating user-data for cloud-init
